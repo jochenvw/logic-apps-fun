@@ -91,11 +91,4 @@ Deploying updated workflows:
 ## Contributing and issues
 - This is a sandbox repo; feel free to open issues or PRs to improve examples, add CI/CD for workflow deployment, or include additional agent patterns and tests.
 
----
-If you want, I can also:
-- update the infra template to pin to a specific `apiVersion` (e.g., latest AI Foundry API),
-- add a sample CI job to deploy workflows automatically, or
-- add a small smoke-test that calls a workflow and asserts expected telemetry/logs were emitted.
-
-Tell me which of those you'd like next and I’ll implement it.
 https://adaptivecards.microsoft.com/designer
