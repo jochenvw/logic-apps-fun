@@ -1,0 +1,1 @@
+https://adaptivecards.microsoft.com/designer
