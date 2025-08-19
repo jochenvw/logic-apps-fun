@@ -17,7 +17,8 @@
 		"vscode": {
 			"extensions": [
 				"ms-vscode.vscode-node-azure-pack",
-				"ms-azuretools.vscode-azurelogicapps"
+				"ms-azuretools.vscode-azurelogicapps",
+				"ms-vscode.azurecli"
 			]
 		}
 	}

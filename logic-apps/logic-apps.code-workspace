@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "name": "simple-stateless",
+      "path": "./simple-stateless"
+    }
+  ],
+  "settings": {
+    "terminal.integrated.env.linux": {
+      "PATH": "/home/vscode/.azurelogicapps/dependencies/DotNetSDK:${env:PATH}"
+    },
+    "omnisharp.dotNetCliPaths": [
+      "/home/vscode/.azurelogicapps/dependencies/DotNetSDK"
+    ]
+  }
+}

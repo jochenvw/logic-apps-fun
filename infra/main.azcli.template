@@ -1,0 +1,6 @@
+# Resource group
+az login --tenant [tenant]
+az account set --subscription [subscription]
+az group create --name nl-stu-jvw-logic-apps-fun --location swedencentral
+az deployment group validate --resource-group nl-stu-jvw-logic-apps-fun --template-file main.bicep
+az deployment group create --resource-group nl-stu-jvw-logic-apps-fun --template-file main.bicep
