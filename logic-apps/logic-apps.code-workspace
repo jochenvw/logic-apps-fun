@@ -3,7 +3,7 @@
     {
       "name": "simple-stateless",
       "path": "./simple-stateless"
-    }
+    },
   ],
   "settings": {
     "terminal.integrated.env.linux": {
@@ -11,6 +11,8 @@
     },
     "omnisharp.dotNetCliPaths": [
       "/home/vscode/.azurelogicapps/dependencies/DotNetSDK"
-    ]
+    ],
+    "debug.internalConsoleOptions": "neverOpen",
+    "azurite.location": ""
   }
 }

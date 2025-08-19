@@ -4,7 +4,6 @@ param workspaceName string = 'law-logic-apps-fun'
 param appInsightsName string = 'ai-logic-apps-fun'
 param storageAccountName string = 'st${uniqueString(resourceGroup().id)}'
 param appServicePlanName string = 'asp-${logicAppName}'
-param foundryWorkspaceName string = 'aifw-${logicAppName}'
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
   name: workspaceName
@@ -27,7 +26,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' = {
   name: storageAccountName
   location: location
   sku: {
@@ -42,7 +41,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
   name: appServicePlanName
   location: location
   sku: {
@@ -55,8 +54,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   }
 }
 
-
-resource logicApp 'Microsoft.Web/sites@2023-12-01' = {
+resource logicApp 'Microsoft.Web/sites@2024-11-01' = {
   name: logicAppName
   location: location
   kind: 'functionapp,workflowapp'
@@ -118,28 +116,50 @@ resource logicApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-resource foundryWorkspace 'Microsoft.MachineLearningServices/workspaces@2024-04-01' = {
-  name: foundryWorkspaceName
+resource openai 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
+  name: 'openai-${logicAppName}'
   location: location
+  kind: 'OpenAI'
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    customSubDomainName: 'openai-${logicAppName}'
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+      bypass: 'AzureServices'
+    }
+  }
   identity: {
     type: 'SystemAssigned'
   }
-  properties: {
-    friendlyName: 'Azure AI Foundry Workspace'
-    description: 'AI Foundry workspace for Logic Apps Fun'
-    storageAccount: storageAccount.id
-    applicationInsights: appInsights.id
-  }
-  sku: {
-    name: 'Basic'
-    tier: 'Basic'
+  tags: {
+    Environment: 'Development'
+    Project: logicAppName
   }
 }
 
 resource contributorRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, logicApp.id, 'b24988ac-6180-42a0-ab88-20f7382dd24c')
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c') // Contributor
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      'b24988ac-6180-42a0-ab88-20f7382dd24c'
+    ) // Contributor
+    principalId: logicApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Grant Cognitive Services User rights to the Logic App principal at resource group scope
+resource cognitiveServicesUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, logicApp.id, 'a97b65f3-24c7-4388-baec-2e87135dc908')
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      'a97b65f3-24c7-4388-baec-2e87135dc908'
+    ) // Cognitive Services User
     principalId: logicApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
