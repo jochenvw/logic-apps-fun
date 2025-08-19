@@ -2,14 +2,9 @@ param location string = 'swedencentral'
 param logicAppName string = 'logic-apps-fun'
 param workspaceName string = 'law-logic-apps-fun'
 param appInsightsName string = 'ai-logic-apps-fun'
-
-param workflowName string = logicAppName
-@description('Workflow definition JSON (object). Use @file when deploying to load from a JSON file.')
-param workflowDefinition string = '{"contentVersion":"1.0.0.0","parameters":{},"actions":{},"triggers":{},"outputs":{},"$schema":"https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"}'
-@description('Workflow parameters object (optional). Use @file when deploying to load from a JSON file.')
-param workflowParameters object = {}
-@description('Workflow state: Enabled or Disabled')
-param workflowState string = 'Enabled'
+param storageAccountName string = 'st${uniqueString(resourceGroup().id)}'
+param appServicePlanName string = 'asp-${logicAppName}'
+param foundryWorkspaceName string = 'aifw-${logicAppName}'
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
   name: workspaceName
@@ -32,53 +27,143 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-
-resource logicWorkflow 'Microsoft.Logic/workflows@2019-05-01' = {
-  name: workflowName
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageAccountName
   location: location
-  tags: {}
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
   properties: {
-    definition: json(workflowDefinition)
-    parameters: workflowParameters
-    state: workflowState
+    accessTier: 'Hot'
+    allowBlobPublicAccess: false
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
   }
 }
 
-resource logicDiag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
-  name: '${workflowName}-diagnostics'
-  scope: logicWorkflow
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+  name: appServicePlanName
+  location: location
+  sku: {
+    name: 'WS1'
+    tier: 'WorkflowStandard'
+  }
+  properties: {
+    targetWorkerCount: 1
+    targetWorkerSizeId: 0
+  }
+}
+
+
+resource logicApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: logicAppName
+  location: location
+  kind: 'functionapp,workflowapp'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      netFrameworkVersion: 'v6.0'
+      functionsRuntimeScaleMonitoringEnabled: false
+      appSettings: [
+        {
+          name: 'APP_KIND'
+          value: 'workflowApp'
+        }
+        {
+          name: 'AzureWebJobsStorage'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+        }
+        {
+          name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+        }
+        {
+          name: 'WEBSITE_CONTENTSHARE'
+          value: toLower(logicAppName)
+        }
+        {
+          name: 'AzureFunctionsJobHost__extensionBundle__id'
+          value: 'Microsoft.Azure.Functions.ExtensionBundle.Workflows'
+        }
+        {
+          name: 'AzureFunctionsJobHost__extensionBundle__version'
+          value: '[1.*, 2.0.0)'
+        }
+        {
+          name: 'FUNCTIONS_EXTENSION_VERSION'
+          value: '~4'
+        }
+        {
+          name: 'FUNCTIONS_WORKER_RUNTIME'
+          value: 'node'
+        }
+        {
+          name: 'WEBSITE_NODE_DEFAULT_VERSION'
+          value: '~18'
+        }
+        {
+          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+          value: appInsights.properties.InstrumentationKey
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
+      ]
+    }
+  }
+}
+
+resource foundryWorkspace 'Microsoft.MachineLearningServices/workspaces@2024-04-01' = {
+  name: foundryWorkspaceName
+  location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    friendlyName: 'Azure AI Foundry Workspace'
+    description: 'AI Foundry workspace for Logic Apps Fun'
+    storageAccount: storageAccount.id
+    applicationInsights: appInsights.id
+  }
+  sku: {
+    name: 'Basic'
+    tier: 'Basic'
+  }
+}
+
+resource contributorRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, logicApp.id, 'b24988ac-6180-42a0-ab88-20f7382dd24c')
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c') // Contributor
+    principalId: logicApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource logicAppDiag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: '${logicAppName}-diagnostics'
+  scope: logicApp
   properties: {
     // send to Log Analytics workspace
     workspaceId: logAnalytics.id
 
-    // common Logic Apps log/metric categories - enable as needed
+    // Logic Apps Standard log categories
     logs: [
       {
+        category: 'FunctionAppLogs'
+        enabled: true
+        retentionPolicy: {
+          enabled: false
+          days: 0
+        }
+      }
+      {
         category: 'WorkflowRuntime'
-        enabled: true
-        retentionPolicy: {
-          enabled: false
-          days: 0
-        }
-      }
-      {
-        category: 'ActionTracking'
-        enabled: true
-        retentionPolicy: {
-          enabled: false
-          days: 0
-        }
-      }
-      {
-        category: 'TriggerHistory'
-        enabled: true
-        retentionPolicy: {
-          enabled: false
-          days: 0
-        }
-      }
-      {
-        category: 'WorkflowEvents'
         enabled: true
         retentionPolicy: {
           enabled: false
