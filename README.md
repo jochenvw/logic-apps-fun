@@ -1,1 +1,101 @@
+# Logic Apps Fun — Agentic Loops Sandbox
+
+A small playground that demonstrates agentic loops and LLM-driven workflows using Azure Logic Apps (Standard) and related Azure services (AI Foundry / Machine Learning workspace, Cognitive Services/OpenAI, Application Insights, Storage). Use this repo to iterate on workflows locally and deploy a minimal infra to Azure for experimentation.
+
+## What this repo contains
+- `infra/` — Bicep/ARM templates and a convenience `main.azcli` for provisioning resources used by the sample Logic Apps (Log Analytics, Application Insights, Storage, App Service Plan, Logic App, Cognitive Services/OpenAI, and an AI Foundry workspace).
+- `logic-apps/` — Logic Apps project with sample workflows and artifacts (connections, host.json, local.settings.json, Maps/Rules/Schemas). Contains example agentic flows.
+
+High-level goal: provide a fast-to-deploy sandbox where Logic Apps workflows can orchestrate agentic loops (calls to Cognitive Services/OpenAI, decision logic, maps/rules) and be observed via Application Insights / Log Analytics.
+
+## Quick start (Azure)
+Checklist before you begin:
+- Azure subscription and permission to create resources in a resource group.
+- Azure CLI installed and logged in (`az login`).
+- Bicep CLI or recent `az` that supports Bicep deployments (modern `az` embeds bicep support).
+
+1. Create (or pick) a resource group:
+
+```bash
+az group create --name my-rg --location swedencentral
+```
+
+2. Validate the template locally (optional):
+
+```bash
+az deployment group validate \
+  --resource-group my-rg \
+  --template-file infra/main.bicep
+```
+
+3. Deploy the infra (this will create the Logic App and cognitive service used by the samples):
+
+```bash
+az deployment group create \
+  --resource-group my-rg \
+  --template-file infra/main.bicep \
+  --parameters logicAppName=logic-apps-fun
+```
+
+Notes:
+- The Bicep uses sensible defaults (names, locations). Adjust parameters in `infra/main.bicep` or pass parameters on the CLI.
+- The deployment creates two role assignments for the Logic App's system-assigned identity:
+  - Contributor (management scope) — existing in the template
+  - Cognitive Services User (GUID `a97b65f3-24c7-4388-baec-2e87135dc908`) — the template grants this at resource group scope so the Logic App can read/list Cognitive Services keys where appropriate.
+
+## Local development (Logic Apps)
+This repo contains Logic Apps Standard projects under `logic-apps/`.
+
+- Open the `logic-apps` folder in VS Code. Install the Logic Apps (Standard) and Azure Tools extensions if you haven't already.
+- You can edit the workflow JSON files directly (they live under `logic-apps/simple-stateless/` and other sample folders).
+- `local.settings.json` and `host.json` are provided for local debugging. To run Logic Apps locally you can use the Functions/Logic Apps local debugging support in VS Code (follow Microsoft docs for Logic Apps Standard local development).
+
+Deploying updated workflows:
+- Use the VS Code Logic Apps extension to deploy to the Logic App resource, or
+- Use `az webapp deployment` or CI/CD pipelines to push updated workflow artifacts to the site.
+
+## Where agentic loops live in this repo
+- Example agentic workflow(s) are in `logic-apps/simple-stateless/` and `logic-apps/agentic-flow/` — look for files named `workflow.json`.
+- The workflows call Cognitive Services / OpenAI endpoints (see `openai-...` resource in `infra/main.bicep`). Adjust inputs/keys in `connections.json` or set environment variables when deploying.
+
+## Troubleshooting
+- Error: "Missing dependent resources in workspace json"
+  - Symptom: workspace deployment fails with ValidationError complaining about missing dependent resources.
+  - Cause: The Machine Learning / AI Foundry resource provider expects the workspace JSON to include collections such as `storageAccounts`, `containerRegistries` or `keyVaults` even when single scalar properties are present.
+  - Fix: `infra/main.bicep` now includes `storageAccounts: [ storageAccount.id ]` and empty `containerRegistries`/`keyVaults` arrays so the workspace JSON contains the expected collections (that resolves the validation error).
+
+- Role assignment errors (conflict or insufficient permission): ensure the account performing deployment has `Owner` or appropriate role to create role assignments at the subscription/resource group scope.
+
+- Cognitive Services / OpenAI quota or access issues: check the Cognitive Services resource created by the template. If you prefer to use your own existing OpenAI/Cognitive Services instance, update the template or set the correct connection in `logic-apps/connections.json`.
+
+## File map (quick)
+- infra/
+  - `main.bicep` — Bicep template for the whole sandbox. Creates Log Analytics, App Insights, Storage, App Service Plan, Logic App, Cognitive Services, AI Foundry workspace and role assignments.
+  - `main.json` — compiled ARM template (generated by Bicep).
+  - `main.azcli` / `main.azcli.template` — helper CLI snippets to run the deployment if you prefer a scripted approach.
+
+- logic-apps/
+  - `simple-stateless/` — a sample Logic App project (workflows, connections, host/local settings).
+  - `agentic-flow/` — example agentic loop workflow.
+  - `Artifacts/` — Maps / Rules / Schemas used by workflows.
+
+## Recommended next steps
+- Inspect `logic-apps/simple-stateless/workflow.json` and `logic-apps/agentic-flow/workflow.json` to understand how the agentic loop is modeled.
+- Hook an OpenAI (or Azure OpenAI) connection and test a single step of the workflow manually before running full loops to prevent runaway costs.
+- Add monitoring alerts on Application Insights/Log Analytics for unexpected behavior in loops (fast feedback is crucial when building agentic flows).
+
+## Security & costs
+- Cognitive Services / OpenAI calls may incur costs. Use a dev subscription with quotas and monitor usage.
+- The template creates system-assigned identities and assigns roles; review the assigned role scopes and reduce privileges if you want a tighter security posture.
+
+## Contributing and issues
+- This is a sandbox repo; feel free to open issues or PRs to improve examples, add CI/CD for workflow deployment, or include additional agent patterns and tests.
+
+---
+If you want, I can also:
+- update the infra template to pin to a specific `apiVersion` (e.g., latest AI Foundry API),
+- add a sample CI job to deploy workflows automatically, or
+- add a small smoke-test that calls a workflow and asserts expected telemetry/logs were emitted.
+
+Tell me which of those you'd like next and I’ll implement it.
 https://adaptivecards.microsoft.com/designer
