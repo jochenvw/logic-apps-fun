@@ -13,7 +13,7 @@
                     },
                     "method": "post",
                     "body": {
-                        "recipient": "jowylick@microsoft.com",
+                        "recipient": "@{parameters('msgRecipient')}",
                         "messageBody": "<p class=\"editor-paragraph\">Hello world!</p>"
                     },
                     "path": "/beta/teams/conversation/message/poster/Flow bot/location/@{encodeURIComponent('Chat with Flow bot')}"

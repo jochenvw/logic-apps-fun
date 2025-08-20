@@ -1,8 +1,8 @@
 {
   "folders": [
     {
-      "name": "simple-stateless",
-      "path": "./simple-stateless"
+      "name": "demo-apps",
+      "path": "./demo-apps"
     },
   ],
   "settings": {

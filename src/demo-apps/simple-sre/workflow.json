@@ -1,0 +1,171 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "actions": {
+            "Default_Agent": {
+                "type": "Agent",
+                "inputs": {
+                    "parameters": {
+                        "agentModelType": "AzureOpenAI",
+                        "deploymentId": "gpt-35-turbo",
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "You are the Azure Site Reliability Agent (SRA). Your mission is to ensure the health, reliability, and performance of Azure-hosted systems by analyzing telemetry and proposing concrete remediation actions.\n\nStart by looking in the Log Analytics workspace logs for hints of an issue. Start with KQL like `AppTraces` - get all fields and limit your search to 5 records.\n\nIf no issues found, respond with 'All OK - no issues found'"
+                            }
+                        ],
+                        "agentModelSettings": {
+                            "deploymentModelProperties": {
+                                "name": "gpt-4.1",
+                                "format": "OpenAI",
+                                "version": "2025-04-14"
+                            }
+                        }
+                    },
+                    "modelConfigurations": {
+                        "model1": {
+                            "referenceName": "agent"
+                        }
+                    }
+                },
+                "tools": {
+                    "Tool": {
+                        "actions": {
+                            "Run_query_and_list_results_V2": {
+                                "type": "ApiConnection",
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "referenceName": "azuremonitorlogs"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "query": "@agentParameters('Query')",
+                                        "timerangetype": "Relative",
+                                        "timerange": "Last 12h"
+                                    },
+                                    "path": "/queryDataV2",
+                                    "queries": {
+                                        "subscriptions": "@{parameters('laSubscriptionId')}",
+                                        "resourcegroups": "@{parameters('laResourceGroup')}",
+                                        "resourcetype": "Log Analytics Workspace",
+                                        "resourcename": "@{parameters('laName')}"
+                                    }
+                                }
+                            }
+                        },
+                        "description": "Log analtycs tools\n",
+                        "agentParameterSchema": {
+                            "type": "object",
+                            "properties": {
+                                "Query": {
+                                    "type": "string",
+                                    "description": "The query you would like to run."
+                                }
+                            },
+                            "required": [
+                                "Query"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {},
+                "limit": {
+                    "count": 100
+                }
+            },
+            "Condition": {
+                "type": "If",
+                "expression": {
+                    "and": [
+                        {
+                            "contains": [
+                                "@outputs('Default_Agent')?['lastAssistantMessage']",
+                                "OK"
+                            ]
+                        }
+                    ]
+                },
+                "actions": {
+                    "Post_message_in_a_chat_or_channel": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "referenceName": "teams"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "recipient": "@{parameters('msgRecipient')}",
+                                "messageBody": "<p class=\"editor-paragraph\">ALL OK - no issues found</p>"
+                            },
+                            "path": "/beta/teams/conversation/message/poster/Flow bot/location/@{encodeURIComponent('Chat with Flow bot')}"
+                        }
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "Post_adaptive_card_and_wait_for_a_response": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "referenceName": "teams"
+                                    }
+                                },
+                                "body": {
+                                    "notificationUrl": "@listCallbackUrl()",
+                                    "body": {
+                                        "messageBody": "{\n    \"type\": \"AdaptiveCard\",\n    \"$schema\": \"https://adaptivecards.io/schemas/adaptive-card.json\",\n    \"version\": \"1.5\",\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"System status update\",\n            \"wrap\": true\n        },\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{outputs('Default_Agent')?['lastAssistantMessage']}\",\n            \"wrap\": true\n        },\n        {\n            \"type\": \"ActionSet\",\n            \"actions\": [\n                {\n                    \"type\": \"Action.Submit\",\n                    \"title\": \"Keep doing stuff\",\n                    \"iconUrl\": \"icon:Play\",\n                    \"data\": { \"action\" : \"continue\" }\n                },\n                {\n                    \"type\": \"Action.Submit\",\n                    \"title\": \"Stop\",\n                    \"iconUrl\": \"icon:Stop\",\n                    \"data\": { \"action\" : \"stop\" }\n                }\n            ]\n        }\n    ]\n}",
+                                        "updateMessage": "Thanks for your response!",
+                                        "recipient": {
+                                            "to": "@{parameters('msgRecipient')}"
+                                        }
+                                    }
+                                },
+                                "path": "/v1.0/teams/conversation/gatherinput/poster/Flow bot/location/@{encodeURIComponent('Chat with Flow bot')}/$subscriptions"
+                            }
+                        },
+                        "Post_message_in_a_chat_or_channel-copy": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "referenceName": "teams"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "recipient": "@{parameters('msgRecipient')}",
+                                    "messageBody": "<p class=\"editor-paragraph\">Next action:</p><br><p class=\"editor-paragraph\">@{body('Post_adaptive_card_and_wait_for_a_response')}</p>"
+                                },
+                                "path": "/beta/teams/conversation/message/poster/Flow bot/location/@{encodeURIComponent('Chat with Flow bot')}"
+                            },
+                            "runAfter": {
+                                "Post_adaptive_card_and_wait_for_a_response": [
+                                    "SUCCEEDED"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Default_Agent": [
+                        "SUCCEEDED"
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "triggers": {
+            "When_a_HTTP_request_is_received": {
+                "type": "Request",
+                "kind": "Http"
+            }
+        }
+    },
+    "kind": "Agentic"
+}
